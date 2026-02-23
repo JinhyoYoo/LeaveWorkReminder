@@ -1,0 +1,12 @@
+# Build
+.build/
+
+# macOS
+.DS_Store
+
+# Debug logs
+*.log
+
+# Generated assets (regenerate via generate_icon.py)
+AppIcon.iconset/
+icon_preview.png
