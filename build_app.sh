@@ -69,6 +69,10 @@ cat > "$APP_BUNDLE/Contents/Info.plist" << 'PLIST'
 </plist>
 PLIST
 
+echo "=== Code signing (ad-hoc)... ==="
+codesign --force --deep --sign - "$APP_BUNDLE"
+echo "  서명 완료"
+
 echo "=== Creating DMG... ==="
 rm -rf "$DMG_DIR" "$DMG_PATH"
 mkdir -p "$DMG_DIR"
