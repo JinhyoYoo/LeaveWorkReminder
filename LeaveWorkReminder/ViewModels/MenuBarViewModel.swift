@@ -1,6 +1,7 @@
 import SwiftUI
 import Combine
 import ServiceManagement
+import UserNotifications
 
 @MainActor
 final class MenuBarViewModel: ObservableObject {
@@ -10,6 +11,7 @@ final class MenuBarViewModel: ObservableObject {
     @Published var apiTestSuccess = false
     @Published var isCheckingWalkingTime = false
     @Published var walkingTimeResult: String?
+    @Published var showAlertStyleWarning = false
 
     private var monitor: ArrivalMonitorService!
     private var cancellables = Set<AnyCancellable>()
@@ -45,6 +47,18 @@ final class MenuBarViewModel: ObservableObject {
 
         if settings.isConfigured {
             monitor.startSchedule()
+        }
+
+        checkNotificationAlertStyle()
+    }
+
+    /// 알림 스타일이 alert인지 확인
+    private func checkNotificationAlertStyle() {
+        UNUserNotificationCenter.current().getNotificationSettings { [weak self] settings in
+            Task { @MainActor in
+                // .alert = 사용자가 닫을 때까지 유지, .banner = 자동으로 사라짐
+                self?.showAlertStyleWarning = settings.alertStyle != .alert
+            }
         }
     }
 
@@ -144,6 +158,24 @@ final class MenuBarViewModel: ObservableObject {
             walkingTimeResult = "도보 시간 계산 실패 (주소를 확인해주세요)"
         }
         isCheckingWalkingTime = false
+    }
+
+    func openNotificationSettings() {
+        // 시스템 설정 > 알림 열기
+        if let url = URL(string: "x-apple.systempreferences:com.apple.Notifications-Settings") {
+            NSWorkspace.shared.open(url)
+        }
+    }
+
+    func sendTestNotification() {
+        NotificationService.sendLeaveNotification(
+            busNumber: "1311",
+            arrivalMinutes: 20,
+            walkingMinutes: 10,
+            elevatorMinutes: 5,
+            address: settings.officeAddress.isEmpty ? "서울특별시 강남구 테헤란로2길 27" : settings.officeAddress,
+            nextBusMessage: "35분후[8번째 전]"
+        )
     }
 
     func updateLaunchAtLogin(_ enabled: Bool) {

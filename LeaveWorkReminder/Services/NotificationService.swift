@@ -1,6 +1,30 @@
 import UserNotifications
 
 enum NotificationService {
+    static let categoryIdentifier = "BUS_ARRIVAL"
+    static let confirmActionIdentifier = "CONFIRM"
+    static let nextBusActionIdentifier = "NEXT_BUS"
+
+    /// 알림 카테고리 등록 (앱 시작 시 호출)
+    static func registerCategories() {
+        let confirmAction = UNNotificationAction(
+            identifier: confirmActionIdentifier,
+            title: "확인",
+            options: []
+        )
+        let nextBusAction = UNNotificationAction(
+            identifier: nextBusActionIdentifier,
+            title: "다음 버스 타자",
+            options: []
+        )
+        let category = UNNotificationCategory(
+            identifier: categoryIdentifier,
+            actions: [confirmAction, nextBusAction],
+            intentIdentifiers: []
+        )
+        UNUserNotificationCenter.current().setNotificationCategories([category])
+    }
+
     static func sendLeaveNotification(busNumber: String, arrivalMinutes: Int,
                                        walkingMinutes: Int, elevatorMinutes: Int,
                                        address: String, nextBusMessage: String) {
@@ -13,6 +37,7 @@ enum NotificationService {
         다음 버스: \(nextBusMessage)
         """
         content.sound = .default
+        content.categoryIdentifier = categoryIdentifier
 
         let request = UNNotificationRequest(
             identifier: "leaveWork-\(UUID().uuidString)",

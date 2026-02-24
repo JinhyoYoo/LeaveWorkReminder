@@ -50,6 +50,10 @@ struct MenuBarView: View {
                     .disabled(!viewModel.settings.isConfigured)
                 }
 
+                Button("테스트 알림") {
+                    viewModel.sendTestNotification()
+                }
+
                 Spacer()
 
                 Button {
@@ -74,6 +78,24 @@ struct MenuBarView: View {
                     Text("설정에서 API 키를 입력해주세요")
                         .font(.system(size: 12))
                 }
+            }
+
+            // 알림 스타일 안내
+            if viewModel.showAlertStyleWarning {
+                HStack(spacing: 6) {
+                    Image(systemName: "bell.badge.slash")
+                        .foregroundStyle(.orange)
+                        .font(.system(size: 12))
+                    Text("알림이 바로 사라집니다.")
+                        .font(.system(size: 11))
+                    Button("알림 설정 열기") {
+                        viewModel.openNotificationSettings()
+                    }
+                    .font(.system(size: 11))
+                }
+                .padding(6)
+                .background(.orange.opacity(0.1))
+                .clipShape(RoundedRectangle(cornerRadius: 6))
             }
 
             Divider()

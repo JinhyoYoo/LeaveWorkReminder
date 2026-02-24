@@ -17,8 +17,13 @@ final class ArrivalMonitorService: ObservableObject {
     private var hasNotifiedToday = false
     private var lastNotifiedDate: Date?
 
+    /// "다음 버스 타자" 대기 상태: 이 시점 이후의 버스만 알림
+    private var skipBusDeadline: Date?
+
     // Sleep/Wake 감지
     private var workspaceObservers: [NSObjectProtocol] = []
+    // 알림 액션 옵저버
+    private var notificationObservers: [NSObjectProtocol] = []
 
     struct LogEntry: Identifiable {
         let id = UUID()
@@ -29,10 +34,12 @@ final class ArrivalMonitorService: ObservableObject {
     init(settings: AppSettings) {
         self.settings = settings
         setupSleepWakeHandling()
+        setupNotificationActionHandling()
     }
 
     deinit {
         workspaceObservers.forEach { NSWorkspace.shared.notificationCenter.removeObserver($0) }
+        notificationObservers.forEach { NotificationCenter.default.removeObserver($0) }
     }
 
     // MARK: - Public
@@ -69,6 +76,7 @@ final class ArrivalMonitorService: ObservableObject {
         pollingTimer = nil
         scheduleTimer?.invalidate()
         scheduleTimer = nil
+        skipBusDeadline = nil
         monitorState = .idle
         addLog("모니터링 중단")
     }
@@ -86,6 +94,71 @@ final class ArrivalMonitorService: ObservableObject {
         currentArrivalInfos
             .filter { $0.exps1 != nil && !$0.isServiceEnded }
             .min { ($0.exps1 ?? Int.max) < ($1.exps1 ?? Int.max) }
+    }
+
+    // MARK: - Notification Action Handling
+
+    private func setupNotificationActionHandling() {
+        // "확인" → 모니터링 중지
+        let confirmObserver = NotificationCenter.default.addObserver(
+            forName: .busNotificationConfirmed,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                self?.handleConfirmAction()
+            }
+        }
+        notificationObservers.append(confirmObserver)
+
+        // "다음 버스 타자" → 다음 버스 대기
+        let nextBusObserver = NotificationCenter.default.addObserver(
+            forName: .busNotificationNextBus,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                self?.handleNextBusAction()
+            }
+        }
+        notificationObservers.append(nextBusObserver)
+    }
+
+    private func handleConfirmAction() {
+        addLog("사용자 확인 → 모니터링 중지")
+        hasNotifiedToday = true
+        skipBusDeadline = nil
+        stopPollingOnly()
+        monitorState = .notified
+    }
+
+    private func handleNextBusAction() {
+        guard let earliest = earliestArrivalInfo, let exps1 = earliest.exps1 else {
+            addLog("다음 버스 대기 → 도착 정보 없음, 폴링 계속")
+            hasNotifiedToday = false
+            return
+        }
+
+        // 현재 첫 번째 버스 도착 시점까지 알림 스킵
+        let deadline = Date().addingTimeInterval(TimeInterval(exps1))
+        skipBusDeadline = deadline
+        hasNotifiedToday = false
+
+        let deadlineFormatter = DateFormatter()
+        deadlineFormatter.dateFormat = "HH:mm:ss"
+        addLog("다음 버스 대기 → \(deadlineFormatter.string(from: deadline)) 이후 버스 알림")
+
+        // 폴링이 멈춰있으면 재시작
+        if !isPolling {
+            monitorState = .polling
+            pollingTimer = Timer.scheduledTimer(withTimeInterval: Constants.pollingIntervalSeconds, repeats: true) { [weak self] _ in
+                Task { @MainActor in
+                    await self?.fetchAndEvaluate()
+                }
+            }
+        }
+
+        monitorState = .waitingForNextBus
     }
 
     // MARK: - Private
@@ -111,7 +184,11 @@ final class ArrivalMonitorService: ObservableObject {
             return
         }
 
-        monitorState = .polling
+        if skipBusDeadline != nil {
+            monitorState = .waitingForNextBus
+        } else {
+            monitorState = .polling
+        }
         addLog("모니터링 시작 (\(settings.busNumbers.joined(separator: ", "))번)")
 
         // 즉시 한 번 실행
@@ -174,7 +251,23 @@ final class ArrivalMonitorService: ObservableObject {
             if let earliest = earliestArrivalInfo,
                let exps1 = earliest.exps1,
                !hasNotifiedToday {
+
                 let arrivalMinutes = TimeCalculator.secondsToMinutes(exps1)
+
+                // "다음 버스 대기" 상태: skipBusDeadline 이전의 버스는 무시
+                if let deadline = skipBusDeadline {
+                    if Date() < deadline {
+                        // 아직 스킵 대상 버스가 지나지 않음 → 알림 보류
+                        addLog("\(earliest.busNumber)번 \(arrivalMinutes)분 후 도착 (다음 버스 대기 중)")
+                        return
+                    } else {
+                        // 스킵 대상 버스가 이미 지남 → deadline 해제, 정상 판단
+                        skipBusDeadline = nil
+                        monitorState = .polling
+                        addLog("이전 버스 통과 → 다음 버스 체크")
+                    }
+                }
+
                 addLog("\(earliest.busNumber)번 \(arrivalMinutes)분 후 도착 (리드타임: \(leadTime)분)")
 
                 if TimeCalculator.shouldNotify(busArrivalSeconds: exps1, totalLeadTimeMinutes: leadTime) {
@@ -262,10 +355,11 @@ final class ArrivalMonitorService: ObservableObject {
             nextBusMessage: otherBuses.isEmpty ? arrivalInfo.arrmsg2 : otherBuses
         )
 
+        // 알림 발송 후 대기 상태 (사용자가 버튼을 누를 때까지)
         hasNotifiedToday = true
         lastNotifiedDate = Date()
         monitorState = .notified
-        addLog("알림 발송 완료! (\(arrivalInfo.busNumber)번 기준)")
+        addLog("알림 발송! (\(arrivalInfo.busNumber)번 기준) - 사용자 응답 대기")
     }
 
     private func stopPollingOnly() {
@@ -295,6 +389,7 @@ final class ArrivalMonitorService: ObservableObject {
         let calendar = Calendar.current
         if let lastDate = lastNotifiedDate, !calendar.isDateInToday(lastDate) {
             hasNotifiedToday = false
+            skipBusDeadline = nil
             todayLogs.removeAll()
         }
         if lastNotifiedDate == nil {

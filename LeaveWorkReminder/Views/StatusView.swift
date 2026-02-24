@@ -151,6 +151,7 @@ enum MonitorState {
     case idle
     case waitingForCheckTime
     case polling
+    case waitingForNextBus
     case notified
     case error(String)
     case serviceEnded
@@ -160,6 +161,7 @@ enum MonitorState {
         case .idle: return "대기"
         case .waitingForCheckTime: return "체크 시간 대기 중"
         case .polling: return "모니터링 중"
+        case .waitingForNextBus: return "다음 버스 대기 중"
         case .notified: return "알림 완료"
         case .error(let msg): return "오류: \(msg)"
         case .serviceEnded: return "운행 종료"
@@ -171,6 +173,7 @@ enum MonitorState {
         case .idle: return .gray
         case .waitingForCheckTime: return .yellow
         case .polling: return .green
+        case .waitingForNextBus: return .orange
         case .notified: return .blue
         case .error: return .red
         case .serviceEnded: return .gray
@@ -182,6 +185,7 @@ enum MonitorState {
         case .idle: return "bus"
         case .waitingForCheckTime: return "clock"
         case .polling: return "bus.fill"
+        case .waitingForNextBus: return "arrow.forward.circle"
         case .notified: return "checkmark.circle.fill"
         case .error: return "exclamationmark.triangle"
         case .serviceEnded: return "moon.fill"

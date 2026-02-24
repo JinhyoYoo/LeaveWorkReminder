@@ -43,13 +43,15 @@ cat > "$APP_BUNDLE/Contents/Info.plist" << 'PLIST'
     <key>CFBundleIconFile</key>
     <string>AppIcon</string>
     <key>CFBundleVersion</key>
-    <string>1.0</string>
+    <string>1.3</string>
     <key>CFBundleShortVersionString</key>
-    <string>1.0</string>
+    <string>1.3</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>LSUIElement</key>
     <true/>
+    <key>NSUserNotificationAlertStyle</key>
+    <string>alert</string>
     <key>LSMinimumSystemVersion</key>
     <string>14.0</string>
     <key>NSAppTransportSecurity</key>
